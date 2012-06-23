@@ -439,7 +439,7 @@ static void sp_state_cb(struct sock *sk)
 {
 	struct sp_usock *usock = (struct sp_usock *)(sk->sk_user_data);
 
-	write_lock_bh(sk->sk_callback_lock);
+	write_lock_bh(&sk->sk_callback_lock);
 	/* kernel_connect() has completed on this socket, mark active */
 	if (sk->sk_state == TCP_ESTABLISHED)
 		usock->active = 1;
@@ -447,7 +447,7 @@ static void sp_state_cb(struct sock *sk)
 	   deregister the underlying socket */
 	else if (sk->sk_state == TCP_CLOSE_WAIT)
 		schedule_work(&usock->work_destroy);
-	write_unlock_bh(sk->sk_callback_lock);
+	write_unlock_bh(&sk->sk_callback_lock);
 }
 
 /*
