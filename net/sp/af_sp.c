@@ -24,6 +24,7 @@
 #define SP_USOCK_LISTENER 1
 #define SP_USOCK_CONNECTION 2
 
+
 static int sp_create(struct net *, struct socket *, int, int);
 static void sp_destruct(struct sock *);
 static int sp_release(struct socket *sock);
@@ -50,6 +51,10 @@ static void sp_in_cb(struct sock *sk, int bytes);
 static void sp_out_cb(struct sock *sk);
 static void sp_listener_work_in(struct work_struct *work);
 static void sp_state_cb(struct sock *sk);
+static int sp_setsockopt(struct socket *sock, int level, int optname,
+	char __user *optval, unsigned int optlen);
+static int sp_getsockopt(struct socket *sock, int level, int optname,
+	char __user *optval, int __user *optlen);
 
 /**
  * list_for_each_circular - iterate over a circular list starting at pos
@@ -73,9 +78,9 @@ static void sp_state_cb(struct sock *sk);
 
 /* SP protocol information */
 static struct proto sp_proto = {
-        .name =         "SP",
-        .owner =        THIS_MODULE,
-        .obj_size =     sizeof(struct sp_sock),
+	.name =		"SP",
+	.owner =	THIS_MODULE,
+	.obj_size =	sizeof(struct sp_sock),
 };
 
 /* SP protocol family operations */
@@ -99,8 +104,8 @@ static const struct proto_ops sp_sock_ops = {
 	.ioctl =	sock_no_ioctl,
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
-	.setsockopt =	sock_no_setsockopt,
-	.getsockopt =	sock_no_getsockopt,
+	.setsockopt =	sp_setsockopt,
+	.getsockopt =	sp_getsockopt,
 	.sendmsg =	sp_sendmsg,
 	.recvmsg =	sp_recvmsg,
 	.mmap =		sock_no_mmap,
@@ -109,7 +114,7 @@ static const struct proto_ops sp_sock_ops = {
 
 /*
  * sp_usock_read: this function is used by decoder to read more data from
-                  the underlying socket
+		  the underlying socket
  */
 int sp_usock_read(struct sp_decoder *dcdr, void *data, int size)
 {
@@ -131,7 +136,7 @@ int sp_usock_read(struct sp_decoder *dcdr, void *data, int size)
 
 /*
  * sp_usock_write: this function is used by encoder to write data to
-                   the underlying socket
+		   the underlying socket
  */
 int sp_usock_write(struct sp_encoder *ecdr, void *data, int size)
 {
@@ -230,7 +235,7 @@ static int sp_parse_address (const char *string, int *protocol,
 		addr_in->sin_addr.s_addr = 0;
 		for(i = 0; i != 4; i++) {
 			seg = 0;
-		        while(*pos >= '0' && *pos <= '9') {
+			while(*pos >= '0' && *pos <= '9') {
 				seg = seg * 10 + *pos - '0';
 				pos++;
 				if(seg > 0xff)
@@ -342,7 +347,7 @@ static void sp_register_usock (struct sp_sock *owner, struct sp_usock *usock,
 	write_unlock_bh(&usock->s->sk->sk_callback_lock);
 
 	/* Add the new socket to the list of underlying sockets */
-        usock->owner = owner;
+	usock->owner = owner;
 	mutex_lock (&owner->sync);
 	if (type == SP_USOCK_LISTENER) {
 		list_add(&usock->list, &owner->listeners);
@@ -457,7 +462,7 @@ static int sp_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	struct msghdr *msg, size_t len)
 {
 	struct sp_sock *sp = container_of (sock->sk, struct sp_sock, sk);
-        if (!sp->sendmsg)
+	if (!sp->sendmsg)
 		return -ENOTSUPP;
 	return (sp->sendmsg)(kiocb, sp, msg, len);
 }
@@ -574,8 +579,8 @@ static int dist_sendmsg(struct kiocb *kiocb, struct sp_sock *sp,
 			goto out_unlock;
 	}
 
-        /* In case of success return size of the message */
-        rc = len;
+	/* In case of success return size of the message */
+	rc = len;
 
 out_unlock:
 	mutex_unlock(&sp->sync);
@@ -609,8 +614,8 @@ static int rep_sendmsg(struct kiocb *kiocb, struct sp_sock *sp,
 	if (rc < 0 && rc != -EAGAIN)
 		goto out_unlock;
 
-        /* In case of success return size of the message */
-        rc = len;
+	/* In case of success return size of the message */
+	rc = len;
 
 	sp->state = SP_SOCK_REP_STATE_IDLE;
 	sp->current_disconnected = 0;
@@ -627,7 +632,7 @@ static int sp_recvmsg(struct kiocb *iocb, struct socket *sock,
 	struct msghdr *msg, size_t size, int flags)
 {
 	struct sp_sock *sp = container_of (sock->sk, struct sp_sock, sk);
-        if (!sp->recvmsg)
+	if (!sp->recvmsg)
 		return -ENOTSUPP;
 	return (sp->recvmsg)(iocb, sp, msg, size, flags);
 }
@@ -642,7 +647,7 @@ static int fq_recvmsg(struct kiocb *iocb, struct sp_sock *sp,
 	int rc;
 	void *msg_data;
 	int msg_size;
-        struct list_head *start_pos;
+	struct list_head *start_pos;
 
 	mutex_lock(&sp->sync);
 
@@ -702,7 +707,7 @@ out_unlock:
 
 /*
  * req_recvmsg: Receive a message from a socket using fair-queueing algorithm,
- *              also use a REQ-style state machine.
+ *	      also use a REQ-style state machine.
  */
 static int req_recvmsg(struct kiocb *iocb, struct sp_sock *sp,
 	struct msghdr *msg, size_t size, int flags)
@@ -725,7 +730,7 @@ static int req_recvmsg(struct kiocb *iocb, struct sp_sock *sp,
 
 /*
  * rep_recvmsg: Receive a message from a socket using fair-queueing algorithm,
- *              also use a REP-style state machine.
+ *	      also use a REP-style state machine.
  */
 static int rep_recvmsg(struct kiocb *iocb, struct sp_sock *sp,
 	struct msghdr *msg, size_t size, int flags)
@@ -957,34 +962,34 @@ static int sp_create(struct net *net, struct socket *sock, int protocol,
 	if (!sk)
 		return -ENOMEM;
 
-        /* Initialise socket-type-specific functions */
+	/* Initialise socket-type-specific functions */
 	sp = (struct sp_sock *)sk;
 	switch (sock->type) {
 	case SOCK_PUB:
-	        sp->sendmsg = dist_sendmsg;
-	        sp->recvmsg = NULL;
+		sp->sendmsg = dist_sendmsg;
+		sp->recvmsg = NULL;
 		break;
 	case SOCK_SUB:
-	        sp->sendmsg = NULL;
-	        sp->recvmsg = fq_recvmsg;
+		sp->sendmsg = NULL;
+		sp->recvmsg = fq_recvmsg;
 		break;
 	case SOCK_REQ:
-	        sp->sendmsg = req_sendmsg;
-	        sp->recvmsg = req_recvmsg;
+		sp->sendmsg = req_sendmsg;
+		sp->recvmsg = req_recvmsg;
 		sp->state = SP_SOCK_REQ_STATE_IDLE;
 		break;
 	case SOCK_REP:
-	        sp->sendmsg = rep_sendmsg;
-	        sp->recvmsg = rep_recvmsg;
+		sp->sendmsg = rep_sendmsg;
+		sp->recvmsg = rep_recvmsg;
 		sp->state = SP_SOCK_REP_STATE_IDLE;
 		break;
 	case SOCK_PUSH:
-	        sp->sendmsg = lb_sendmsg;
-	        sp->recvmsg = NULL;
+		sp->sendmsg = lb_sendmsg;
+		sp->recvmsg = NULL;
 		break;
 	case SOCK_PULL:
-	        sp->sendmsg = NULL;
-	        sp->recvmsg = fq_recvmsg;
+		sp->sendmsg = NULL;
+		sp->recvmsg = fq_recvmsg;
 		break;
 	default:
 		kfree (sk);
@@ -1011,6 +1016,65 @@ static int sp_create(struct net *net, struct socket *sock, int protocol,
 	local_bh_enable();
 
 	return 0;
+}
+
+static int sp_setsockopt(struct socket *sock, int level, int optname,
+	char __user *optval, unsigned int optlen)
+{
+	struct sock *sk = sock->sk;
+	struct sp_sock *sp = (struct sp_sock *)sk;
+	
+	switch(optname) {
+
+	case SP_RECONNECT_IVL:
+		if (optlen != sizeof (int)) {
+		    return -EINVAL;
+		}
+		if (*((int*) optval) < 0) {
+		    return -EINVAL;
+		}
+		sp->options->reconnect_ivl = *((int*) optval);
+		return 0;
+
+	case SP_RECONNECT_IVL_MAX:
+		if (optlen != sizeof (int)) {
+		    return -EINVAL;
+
+		}
+		if (*((int*) optval) < 0) {
+		    return -EINVAL;
+		}
+		sp->options->reconnect_ivl_max = *((int*) optval);
+		return 0;
+	}
+	return -EINVAL;
+}
+
+static int sp_getsockopt(struct socket *sock, int level, int optname,
+	char __user *optval, int __user *optlen)
+{
+	struct sock *sk = sock->sk;
+	struct sp_sock *sp = (struct sp_sock *)sk;
+
+	switch(optname) {
+
+	case SP_RECONNECT_IVL:
+	    if (*optlen < sizeof (int)) {
+		return -EINVAL;
+	    }
+	    *((int*) optval) = sp->options->reconnect_ivl;
+	    *optlen = sizeof (int);
+	    return 0;
+
+	case SP_RECONNECT_IVL_MAX:
+	    if (*optlen < sizeof (int)) {
+		return -EINVAL;
+	    }
+	    *((int*) optval) = sp->options->reconnect_ivl_max;
+	    *optlen = sizeof (int);
+	    return 0;
+	}
+	return -EINVAL;
 }
 
 /*

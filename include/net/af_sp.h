@@ -24,6 +24,10 @@
 #define SP_SOCK_REP_STATE_IDLE 0
 #define SP_SOCK_REP_STATE_BUSY 1
 
+/* socket options. */
+#define SP_RECONNECT_IVL 18
+#define SP_RECONNECT_IVL_MAX 21
+
 /* A single underlying socket */
 struct sp_usock {
 	/* Each SP socket has a list of usocks */
@@ -48,6 +52,16 @@ struct sp_usock {
 	int active;
 };
 
+/* Socket options */
+struct sp_options {
+	/* Minimum interval between attempts to reconnect, in milliseconds.
+	 * Default 100ms */
+	int reconnect_ivl;
+	/* Maximum interval between attempts to reconnect, in milliseconds.
+	 *  Default 0 (unused) */
+	int reconnect_ivl_max;
+};
+
 /* The AF_SP socket private data */
 struct sp_sock {
 	/* WARNING: sk has to be the first member */
@@ -68,16 +82,17 @@ struct sp_sock {
 	/* Pointers to current in/out usock */
 	struct list_head *current_in;
 	struct list_head *current_out;
-        /* If 1, the currently processed connection have disconnected */
-        int current_disconnected;
+	/* If 1, the currently processed connection have disconnected */
+	int current_disconnected;
 	/* Virtual send and recv functions */
 	int (*sendmsg)(struct kiocb *, struct sp_sock *, struct msghdr *,
 		size_t);
 	int (*recvmsg)(struct kiocb *, struct sp_sock *, struct msghdr *,
 		size_t, int);
 	/* State of the FSM associated with the SP socket. Actual states
-           depend on the socket type. */
+	   depend on the socket type. */
 	int state;
+	struct sp_options *options;
 };
 
 #endif
